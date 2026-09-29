@@ -10,7 +10,6 @@ import {
   Snowflake, 
   Droplets, 
   History, 
-  Languages,
   Activity,
   Layers
 } from 'lucide-react';
@@ -18,7 +17,6 @@ import {
 export const SynopticIntelligence: React.FC = () => {
   const [data, setData] = useState<SynopticData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lang, setLang] = useState<'en' | 'hi'>('en');
 
   useEffect(() => {
     weatherApi.getSynoptic()
@@ -64,16 +62,6 @@ export const SynopticIntelligence: React.FC = () => {
           <p className="text-base sm:text-lg text-[var(--text-secondary)] font-medium pl-1">
             Western Disturbances (WD) · Cloudburst Vulnerability · Freezing Level Shift
           </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setLang((l) => (l === 'en' ? 'hi' : 'en'))}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-[var(--muted-surface)] border border-[var(--border)] text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-          >
-            <Languages className="h-4 w-4 text-[var(--weather-blue)]" />
-            <span>{lang === 'en' ? 'हिंदी' : 'EN'}</span>
-          </button>
         </div>
       </div>
 
@@ -212,10 +200,10 @@ export const SynopticIntelligence: React.FC = () => {
           <AlertTriangle className="h-7 w-7 text-[var(--weather-blue)] shrink-0 mt-0.5" />
           <div className="space-y-1.5">
             <span className="text-sm font-mono font-black uppercase tracking-wider text-[var(--weather-blue)] block">
-              High-Altitude Advisory ({lang === 'en' ? 'English' : 'हिंदी'}):
+              High-Altitude Advisory:
             </span>
             <p className="text-base sm:text-lg text-[var(--text-primary)] font-medium leading-relaxed">
-              {lang === 'en' ? wd.operational_guidance_en : wd.operational_guidance_hi}
+              {wd.operational_guidance_en}
             </p>
           </div>
         </div>

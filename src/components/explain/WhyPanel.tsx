@@ -10,8 +10,6 @@ interface Props {
 }
 
 export const WhyPanel: React.FC<Props> = ({ explainData, loading = false }) => {
-  const [lang, setLang] = useState<'en' | 'hi'>('en');
-
   if (loading) {
     return (
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-xl p-6 animate-pulse space-y-4">
@@ -30,49 +28,23 @@ export const WhyPanel: React.FC<Props> = ({ explainData, loading = false }) => {
 
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-xl p-5 sm:p-6 space-y-5 shadow-2xl">
-      {/* Title & Language Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-[var(--weather-blue)]/15 text-[var(--weather-blue)] border border-[var(--weather-blue)]/30">
-            <HelpCircle className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-[var(--text-primary)]">Why is this forecast uncertain?</h3>
-            <p className="text-xs text-[var(--text-secondary)]">
-              SHAP feature attribution & multi-model atmospheric spread
-            </p>
-          </div>
+      {/* Title */}
+      <div className="flex items-center gap-2.5 border-b border-[var(--border)] pb-3">
+        <div className="p-2 rounded-xl bg-[var(--weather-blue)]/15 text-[var(--weather-blue)] border border-[var(--weather-blue)]/30">
+          <HelpCircle className="h-5 w-5" />
         </div>
-
-        {/* Language selector */}
-        <div className="flex items-center gap-1 self-start sm:self-auto bg-[var(--muted-surface)] p-1 rounded-xl border border-[var(--border)]">
-          <button
-            onClick={() => setLang('en')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-              lang === 'en'
-                ? 'bg-[var(--weather-blue)]/15 text-[var(--weather-blue)] border border-[var(--weather-blue)]/30'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            English
-          </button>
-          <button
-            onClick={() => setLang('hi')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-              lang === 'hi'
-                ? 'bg-[var(--weather-blue)]/15 text-[var(--weather-blue)] border border-[var(--weather-blue)]/30'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            हिन्दी (Hindi)
-          </button>
+        <div>
+          <h3 className="text-base font-bold text-[var(--text-primary)]">Why is this forecast uncertain?</h3>
+          <p className="text-xs text-[var(--text-secondary)]">
+            SHAP feature attribution & multi-model atmospheric spread
+          </p>
         </div>
       </div>
 
       {/* Verified AI Summary Text */}
       <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--weather-blue)]/10 text-xs text-[var(--text-primary)] leading-relaxed font-sans">
         <p className="font-medium">
-          {lang === 'en' ? explainData.text_en : explainData.text_hi}
+          {explainData.text_en}
         </p>
       </div>
 

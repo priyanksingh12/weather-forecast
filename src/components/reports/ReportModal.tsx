@@ -25,7 +25,7 @@ export const ReportModal: React.FC<Props> = ({
   const [regionId, setRegionId] = useState(defaultRegion);
   const [day, setDay] = useState(defaultDay);
   const [variable, setVariable] = useState<WeatherVariable>(defaultVariable);
-  const [language, setLanguage] = useState<'en' | 'hi'>('en');
+  const language = 'en';
   const [includeAnalogs, setIncludeAnalogs] = useState(true);
 
   const [generating, setGenerating] = useState(false);
@@ -210,34 +210,6 @@ export const ReportModal: React.FC<Props> = ({
                   />
                   <span>Include Top 5 Historical Analogs and Time Machine Replay Analysis</span>
                 </label>
-
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <span className="text-[var(--text-secondary)]">Report Language:</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setLanguage('en')}
-                      className={`px-2.5 py-1 rounded text-xs font-medium cursor-pointer transition-colors ${
-                        language === 'en'
-                          ? 'bg-[var(--weather-blue)]/15 text-[var(--weather-blue)] border border-[var(--weather-blue)]/30 font-bold'
-                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--muted-surface)] border border-transparent'
-                      }`}
-                    >
-                      English
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLanguage('hi')}
-                      className={`px-2.5 py-1 rounded text-xs font-medium cursor-pointer transition-colors ${
-                        language === 'hi'
-                          ? 'bg-[var(--weather-blue)]/15 text-[var(--weather-blue)] border border-[var(--weather-blue)]/30 font-bold'
-                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--muted-surface)] border border-transparent'
-                      }`}
-                    >
-                      हिन्दी (Hindi)
-                    </button>
-                  </div>
-                </div>
               </div>
 
               {/* Progress Indicator when generating */}

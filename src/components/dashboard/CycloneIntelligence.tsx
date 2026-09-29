@@ -12,14 +12,12 @@ import {
   Flame, 
   Navigation, 
   History,
-  Languages,
   CheckCircle2
 } from 'lucide-react';
 
 export const CycloneIntelligence: React.FC = () => {
   const [data, setData] = useState<CycloneData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lang, setLang] = useState<'en' | 'hi'>('en');
 
   useEffect(() => {
     weatherApi.getCyclone()
@@ -74,14 +72,6 @@ export const CycloneIntelligence: React.FC = () => {
             <span className="h-2.5 w-2.5 rounded-full bg-[var(--risk-extreme)] animate-ping"></span>
             <span>ACTIVE SYSTEM: {cyclone.name.toUpperCase()}</span>
           </div>
-
-          <button
-            onClick={() => setLang((l) => (l === 'en' ? 'hi' : 'en'))}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-[var(--muted-surface)] border border-[var(--border)] text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-          >
-            <Languages className="h-4 w-4 text-[var(--weather-blue)]" />
-            <span>{lang === 'en' ? 'हिंदी' : 'EN'}</span>
-          </button>
         </div>
       </div>
 
@@ -221,12 +211,10 @@ export const CycloneIntelligence: React.FC = () => {
         <AlertTriangle className="h-7 w-7 text-[var(--risk-extreme)] shrink-0 mt-0.5" />
         <div className="space-y-1.5">
           <span className="text-sm font-mono font-black uppercase tracking-wider text-[var(--risk-extreme)] block">
-            Coastline Advisory ({lang === 'en' ? 'English' : 'हिंदी'}):
+            Coastline Advisory:
           </span>
           <p className="text-base sm:text-lg text-[var(--text-primary)] font-medium leading-relaxed">
-            {lang === 'en'
-              ? cyclone.operational_guidance_en || 'High Rapid Intensification risk detected. Deep convective feeding supported by high ocean heat content. Enforce preemptive storm surge evacuation protocols 24h ahead of schedule.'
-              : cyclone.operational_guidance_hi || 'तीव्र चक्रवाती गतिशीलता के कारण तटीय क्षेत्रों में समय पूर्व चेतावनी लागू करें।'}
+            {cyclone.operational_guidance_en || 'High Rapid Intensification risk detected. Deep convective feeding supported by high ocean heat content. Enforce preemptive storm surge evacuation protocols 24h ahead of schedule.'}
           </p>
         </div>
       </div>

@@ -13,7 +13,6 @@ import {
   Award, 
   Layers, 
   TrendingUp,
-  Languages,
   Activity,
   Heart,
   Droplets,
@@ -39,7 +38,6 @@ export const MultiModelConsensus: React.FC<Props> = ({
 }) => {
   const [data, setData] = useState<ConsensusData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [language, setLanguage] = useState<'en' | 'hi'>('en');
 
   useEffect(() => {
     setLoading(true);
@@ -132,20 +130,12 @@ export const MultiModelConsensus: React.FC<Props> = ({
           </p>
         </div>
 
-        {/* Badges and Language Toggle Row Underneath */}
+        {/* Badges Row Underneath */}
         <div className="pt-4 border-t border-[var(--border)]/70 flex flex-wrap items-center justify-between gap-3.5 w-full">
           <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs sm:text-sm font-mono font-black ${badge.bg}`}>
             {badge.icon}
             <span>{badge.label}</span>
           </div>
-
-          <button
-            onClick={() => setLanguage((l) => (l === 'en' ? 'hi' : 'en'))}
-            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-[var(--muted-surface)] border border-[var(--border)] text-xs sm:text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors cursor-pointer"
-          >
-            <Languages className="h-4 w-4 text-[var(--weather-blue)]" />
-            <span>{language === 'en' ? 'हिंदी में पढ़ें' : 'Read in English'}</span>
-          </button>
         </div>
       </div>
 
@@ -351,12 +341,10 @@ export const MultiModelConsensus: React.FC<Props> = ({
         <HelpCircle className="h-5 w-5 text-[var(--weather-blue)] shrink-0 mt-0.5" />
         <div className="space-y-1 text-sm sm:text-base text-[var(--text-secondary)] leading-relaxed font-sans">
           <span className="font-bold text-[var(--weather-blue)] block text-xs uppercase tracking-wider">
-            Operational Meteorological Analysis ({language.toUpperCase()}):
+            Operational Meteorological Analysis:
           </span>
           <p>
-            {language === 'en'
-              ? data.summary_en || `High consensus between ECMWF IFS and NOAA GFS for ${regionSlug}. Model spread is within operational tolerance.`
-              : data.summary_hi || `ECMWF IFS और NOAA GFS के बीच उच्च सहमति देखी गई है। मॉडल विसंगति सामान्य सीमा के भीतर है।`}
+            {data.summary_en || `High consensus between ECMWF IFS and NOAA GFS for ${regionSlug}. Model spread is within operational tolerance.`}
           </p>
         </div>
       </div>

@@ -10,7 +10,6 @@ import {
   CheckCircle2, 
   Info, 
   Flame, 
-  Languages, 
   ArrowRight,
   Maximize2,
   Activity,
@@ -46,7 +45,6 @@ export const HorizonPredictabilityWall: React.FC<Props> = ({
 }) => {
   const [data, setData] = useState<HorizonData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lang, setLang] = useState<'en' | 'hi'>('en');
 
   useEffect(() => {
     setLoading(true);
@@ -95,20 +93,12 @@ export const HorizonPredictabilityWall: React.FC<Props> = ({
           </p>
         </div>
 
-        {/* Predictability Wall Indicator & Language Toggle Row Underneath */}
+        {/* Predictability Wall Indicator Row Underneath */}
         <div className="pt-4 border-t border-[var(--border)]/70 flex flex-wrap items-center justify-between gap-3.5 w-full">
           <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-[var(--risk-extreme)]/20 border border-[var(--risk-extreme)]/50 text-[var(--risk-extreme)] text-xs sm:text-sm font-mono font-black shadow-sm">
             <Flame className="h-4 w-4 text-[var(--risk-extreme)] animate-pulse" />
             <span>PREDICTABILITY WALL: DAY {bustWallDay}</span>
           </div>
-
-          <button
-            onClick={() => setLang((l) => (l === 'en' ? 'hi' : 'en'))}
-            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-[var(--muted-surface)] border border-[var(--border)] text-xs sm:text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors cursor-pointer"
-          >
-            <Languages className="h-4 w-4 text-[var(--weather-blue)]" />
-            <span>{lang === 'en' ? 'हिंदी में पढ़ें' : 'Read in English'}</span>
-          </button>
         </div>
       </div>
 
@@ -344,12 +334,10 @@ export const HorizonPredictabilityWall: React.FC<Props> = ({
         <AlertTriangle className="h-6 w-6 text-[var(--risk-watch)] shrink-0 mt-0.5" />
         <div className="space-y-1">
           <span className="text-xs font-mono font-black uppercase tracking-wider text-[var(--risk-watch)] block">
-            Official Operational Advisory ({lang === 'en' ? 'English' : 'हिंदी'}):
+            Official Operational Advisory:
           </span>
           <p className="text-sm sm:text-base text-[var(--text-primary)] font-medium leading-relaxed">
-            {lang === 'en'
-              ? data.operational_guidance_en || `High deterministic reliability holds through Day 4. Beyond Day ${bustWallDay}, forecast uncertainty increases rapidly. Do not allocate irreversible civil defense resources without ensemble verification.`
-              : data.operational_guidance_hi || `Day 4 तक उच्च मॉडल विश्वसनीयता बनी रहती है। Day ${bustWallDay} के बाद पूर्वानुमान विफलता जोखिम 50% से अधिक हो जाता है।`}
+            {data.operational_guidance_en || `High deterministic reliability holds through Day 4. Beyond Day ${bustWallDay}, forecast uncertainty increases rapidly. Do not allocate irreversible civil defense resources without ensemble verification.`}
           </p>
         </div>
       </div>

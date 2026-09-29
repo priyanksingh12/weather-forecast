@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { 
   MessageSquare, 
-  ArrowRight, 
   ExternalLink, 
   QrCode, 
   ShieldCheck, 
@@ -18,7 +17,6 @@ import {
   RefreshCw,
   HelpCircle
 } from 'lucide-react';
-import Link from 'next/link';
 import { generateReportPdf } from '../../lib/pdf/generateReportPdf';
 
 interface ChatMessage {
@@ -32,7 +30,7 @@ interface ChatMessage {
 
 export const WhatsAppIntegrationSection: React.FC = () => {
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
-  const [sandboxCode, setSandboxCode] = useState<string>('smart-monsoon');
+  const [sandboxCode, setSandboxCode] = useState<string>('round-cat');
   const [isEditingCode, setIsEditingCode] = useState(false);
   const [activeTab, setActiveTab] = useState<'simulator' | 'connect'>('simulator');
   const [inputValue, setInputValue] = useState('');
@@ -226,9 +224,6 @@ Available commands:
               <h3 className="text-2xl sm:text-3xl font-black text-[var(--text-primary)] tracking-tight">
                 WhatsApp Weather Reliability & Alert Bot
               </h3>
-              <span className="px-3 py-0.5 rounded-full text-xs font-mono font-bold bg-[var(--safe-green)]/15 text-[var(--safe-green)] border border-[var(--safe-green)]/30">
-                Official SIH-2.0
-              </span>
             </div>
             <p className="text-sm sm:text-base text-[var(--text-secondary)] font-medium mt-0.5">
               Query calibrated trust scores, receive bust surge alerts, and download briefs without opening a browser
@@ -554,23 +549,6 @@ Available commands:
           </div>
         </div>
       )}
-
-      {/* Deep Link Continuity Footer */}
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--weather-blue)]/5 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-sm">
-        <div className="space-y-1">
-          <span className="font-bold text-[var(--weather-blue)] text-base">WhatsApp Deep Link Continuity:</span>
-          <p className="text-[var(--text-secondary)]">
-            Every WhatsApp message includes signed deep links that restore this dashboard to the exact requested region and lead day.
-          </p>
-        </div>
-        <Link
-          href="/region/lucknow?day=7&var=rainfall&view=reliability"
-          className="flex items-center gap-1.5 font-mono font-bold text-sm text-[var(--weather-blue)] hover:underline shrink-0"
-        >
-          <span>Test Deep Link</span>
-          <ArrowRight className="h-4 w-4" />
-        </Link>
-      </div>
     </div>
   );
 };
