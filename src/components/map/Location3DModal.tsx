@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { INDIA_REGIONS } from '../../lib/geo/indiaGeoJson';
+import { getRegionalData } from '../../lib/data/regionalIntelligence';
 import { WeatherVariable } from '../../lib/api/types';
-import { getBustColor } from '../../lib/utils/colors';
 import { 
   X, 
   Globe2, 
@@ -15,19 +14,43 @@ import {
   Thermometer, 
   ShieldAlert,
   ArrowLeft,
-  Info
+  Info,
+  Sparkles,
+  MapPin
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
-const GlobeView = dynamic(() => import('./GlobeView').then((m) => m.GlobeView), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex flex-col items-center justify-center space-y-3 bg-[var(--background)]">
-      <div className="h-10 w-10 rounded-full border-3 border-[var(--weather-blue)] border-t-transparent animate-spin"></div>
-      <span className="text-sm font-mono text-[var(--weather-blue)]">Rendering 3D Atmosphere Projection...</span>
-    </div>
-  )
-});
+// Dynamic import for Three.js WebGL 3D India Weather Map
+const IndiaWeatherMap = dynamic(
+  () => import('../IndiaWeatherMap').then((m) => m.IndiaWeatherMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-full flex flex-col items-center justify-center space-y-3 bg-[#101b20]">
+        <div className="h-12 w-12 rounded-full border-3 border-[var(--weather-blue)] border-t-transparent animate-spin" />
+        <span className="text-sm font-mono text-[var(--weather-blue)] font-bold">
+          Rendering 3D Atmosphere Relief Simulation...
+        </span>
+      </div>
+    ),
+  }
+);
+
+// Dynamic import for MapLibre 3D Globe
+const GlobeView = dynamic(
+  () => import('./GlobeView').then((m) => m.GlobeView),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-full flex flex-col items-center justify-center space-y-3 bg-[var(--background)]">
+        <div className="h-10 w-10 rounded-full border-3 border-[var(--weather-blue)] border-t-transparent animate-spin" />
+        <span className="text-sm font-mono text-[var(--weather-blue)]">
+          Projecting 3D Earth Globe...
+        </span>
+      </div>
+    ),
+  }
+);
 
 interface Props {
   isOpen: boolean;
@@ -46,10 +69,9 @@ export const Location3DModal: React.FC<Props> = ({
   variable,
   onClose,
   onDayChange,
-  onVariableChange
+  onVariableChange,
 }) => {
-  const [activeLayer, setActiveLayer] = useState<'bust' | 'rain' | 'temp' | 'wind'>('bust');
-  const [rotAngle, setRotAngle] = useState(0);
+  const [viewMode, setViewMode] = useState<'relief-3d' | 'globe-3d'>('relief-3d');
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -63,16 +85,16 @@ export const Location3DModal: React.FC<Props> = ({
 
   if (!isOpen || !regionId) return null;
 
-  const region = INDIA_REGIONS.find((r) => r.id === regionId) || INDIA_REGIONS[0];
+  const region = getRegionalData(regionId);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200">
       <div 
-        className="relative w-full max-w-6xl h-[92vh] rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl overflow-hidden flex flex-col"
+        className="relative w-full max-w-7xl h-[92vh] rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Floating Control Bar */}
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4 bg-[var(--surface)]/90 backdrop-blur-xl z-20">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 sm:px-6 py-3.5 bg-[var(--surface)]/95 backdrop-blur-xl z-20">
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
@@ -81,21 +103,47 @@ export const Location3DModal: React.FC<Props> = ({
               <ArrowLeft className="h-4 w-4" />
               <span>Back to Map</span>
             </button>
-            <div className="h-4 w-[1px] bg-[var(--border)] hidden sm:block"></div>
+            <div className="h-4 w-[1px] bg-[var(--border)] hidden sm:block" />
             <div className="flex items-center gap-2">
-              <Globe2 className="h-5 w-5 text-[var(--weather-blue)]" />
+              <Sparkles className="h-5 w-5 text-[var(--weather-blue)]" />
               <h3 className="text-base sm:text-lg font-bold text-[var(--text-primary)] tracking-tight">
-                3D Geospatial Visualization · {region.name_en}
+                3D Geospatial Visualization · {region.name}
               </h3>
               <span className="hidden sm:inline-block rounded-full bg-[var(--weather-blue)]/10 px-2.5 py-0.5 text-xs font-mono text-[var(--weather-blue)] border border-[var(--weather-blue)]/30">
-                {region.centroid[1].toFixed(2)}°N, {region.centroid[0].toFixed(2)}°E
+                {region.lat.toFixed(2)}°N, {region.lon.toFixed(2)}°E
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* View Mode Switcher: 3D Relief vs 3D Globe */}
+            <div className="flex items-center bg-[var(--muted-surface)] p-1 rounded-xl border border-[var(--border)] text-xs">
+              <button
+                onClick={() => setViewMode('relief-3d')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  viewMode === 'relief-3d'
+                    ? 'bg-[var(--weather-blue)] text-white shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>3D India Relief</span>
+              </button>
+              <button
+                onClick={() => setViewMode('globe-3d')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  viewMode === 'globe-3d'
+                    ? 'bg-[var(--weather-blue)] text-white shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                <Globe2 className="h-3.5 w-3.5" />
+                <span>3D Earth Globe</span>
+              </button>
+            </div>
+
             {/* Day Selector Pill */}
-            <div className="hidden sm:flex items-center gap-1 bg-[var(--muted-surface)] p-1 rounded-xl border border-[var(--border)] text-xs">
+            <div className="hidden md:flex items-center gap-1 bg-[var(--muted-surface)] p-1 rounded-xl border border-[var(--border)] text-xs">
               <span className="text-[var(--text-secondary)] px-2 font-mono">Lead:</span>
               {[1, 3, 5, 7, 10].map((d) => (
                 <button
@@ -122,20 +170,30 @@ export const Location3DModal: React.FC<Props> = ({
         </div>
 
         {/* 3D Visualizer Canvas Container */}
-        <div className="relative flex-1 w-full h-full overflow-hidden bg-[var(--background)]">
-          <GlobeView
-            mapData={null}
-            selectedRegionId={region.id}
-            onSelectRegion={() => {}}
-            variable={variable}
-            onVariableChange={onVariableChange}
-            day={day}
-          />
+        <div className="relative flex-1 w-full h-full overflow-hidden bg-[#0d1518]">
+          {viewMode === 'relief-3d' ? (
+            <IndiaWeatherMap
+              className="w-full h-full"
+              day={day}
+              onStateSelect={(name, slug) => {
+                console.log('Selected 3D state:', name, slug);
+              }}
+            />
+          ) : (
+            <GlobeView
+              mapData={null}
+              selectedRegionId={region.slug}
+              onSelectRegion={() => {}}
+              variable={variable}
+              onVariableChange={onVariableChange}
+              day={day}
+            />
+          )}
 
           {/* Floating 3D HUD Overlay: Region Telemetry */}
-          <div className="absolute top-4 left-4 z-20 max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-xl p-4 shadow-2xl space-y-3 pointer-events-auto">
+          <div className="absolute top-4 left-4 z-20 max-w-xs sm:max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-xl p-4 shadow-2xl space-y-3 pointer-events-auto">
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
-              <span className="text-sm font-extrabold text-[var(--text-primary)]">{region.name_en}</span>
+              <span className="text-sm font-extrabold text-[var(--text-primary)]">{region.name}</span>
               <span className="text-xs font-mono text-[var(--weather-blue)] font-bold bg-[var(--weather-blue)]/15 px-2 py-0.5 rounded border border-[var(--weather-blue)]/30">
                 Day {day} Horizon
               </span>
@@ -148,11 +206,19 @@ export const Location3DModal: React.FC<Props> = ({
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[var(--text-secondary)]">Centroid Coordinates:</span>
-                <span className="font-mono text-[var(--weather-blue)]">{region.centroid[1].toFixed(2)}°N, {region.centroid[0].toFixed(2)}°E</span>
+                <span className="font-mono text-[var(--weather-blue)]">{region.lat.toFixed(2)}°N, {region.lon.toFixed(2)}°E</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-[var(--text-secondary)]">Regional Bounding Box:</span>
-                <span className="font-mono text-[var(--text-secondary)]">{region.bbox.join(', ')}</span>
+                <span className="text-[var(--text-secondary)]">State / Province:</span>
+                <span className="font-medium text-[var(--text-primary)]">{region.state}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[var(--text-secondary)]">24h Rainfall:</span>
+                <span className="font-mono font-bold text-[var(--text-primary)]">{region.rainfall24h} mm</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[var(--text-secondary)]">Burst Probability:</span>
+                <span className="font-mono font-bold text-amber-400">{region.burstProbability}%</span>
               </div>
             </div>
 
@@ -211,8 +277,8 @@ export const Location3DModal: React.FC<Props> = ({
           </div>
 
           {/* Bottom HUD Hint */}
-          <div className="absolute bottom-4 left-4 z-20 bg-[var(--surface)]/90 backdrop-blur-md px-4 py-2 rounded-xl border border-[var(--border)] text-xs text-[var(--text-secondary)] pointer-events-none shadow-md">
-            Click & drag to rotate 3D Earth globe · Scroll to zoom into regional atmosphere layers
+          <div className="absolute bottom-4 left-4 z-20 bg-[var(--surface)]/90 backdrop-blur-md px-4 py-2 rounded-xl border border-[var(--border)] text-xs text-[var(--text-secondary)] pointer-events-none shadow-md hidden sm:block">
+            Click & drag to rotate 3D relief · Scroll to zoom · Click any state mesh to inspect synoptic dialog
           </div>
         </div>
       </div>

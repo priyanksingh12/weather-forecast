@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ResponsiveContainer, 
@@ -12,8 +12,13 @@ import {
   CartesianGrid,
   ReferenceLine 
 } from 'recharts';
-import { weatherApi, HorizonData, HorizonDay } from '../../services/api';
+import { weatherApi } from '../../services/api';
 import { WeatherVariable } from '../../lib/api/types';
+import { 
+  getSynthesizedDifferencePoints, 
+  normalizeVariable,
+  DayDiffPoint
+} from '../../lib/data/horizonIntelligence';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -30,7 +35,10 @@ import {
   BarChart3,
   Droplets,
   Wind,
-  Heart
+  Heart,
+  CloudRain,
+  Thermometer,
+  Gauge
 } from 'lucide-react';
 
 interface Props {
@@ -38,51 +46,61 @@ interface Props {
   variable: WeatherVariable;
   selectedLeadDay: number;
   onSelectLeadDay: (day: number) => void;
-}
-
-interface DayDiffPoint {
-  day: number;
-  dayLabel: string;
-  hours: number;
-  ecmwfVal: number;
-  gfsVal: number;
-  spread: number;
-  dayOverDayDelta: number;
-  confidence: number;
-  bustProb: number;
-  expectedMae: number;
-  driver: string;
-  isWall: boolean;
+  onVariableChange?: (v: WeatherVariable) => void;
 }
 
 export const EverydayDifferenceChart: React.FC<Props> = ({
   regionSlug,
   variable,
   selectedLeadDay,
-  onSelectLeadDay
+  onSelectLeadDay,
+  onVariableChange
 }) => {
-  const [horizonData, setHorizonData] = useState<HorizonData | null>(null);
-  const [forecastValues, setForecastValues] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const normVar = normalizeVariable(variable);
+
+  // Instantly available calibrated points
+  const [points, setPoints] = useState<DayDiffPoint[]>(() => getSynthesizedDifferencePoints(regionSlug, normVar));
   const [chartType, setChartType] = useState<'area' | 'bars'>('area');
   const [viewMode, setViewMode] = useState<'spread' | 'day_over_day' | 'mae'>('spread');
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // Fetch both horizon and forecast series
+  // Sync points when regionSlug or variable changes
   useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      weatherApi.getHorizon(regionSlug, variable).catch(() => null),
-      weatherApi.getForecast(regionSlug, variable).catch(() => null)
-    ])
-      .then(([horizonRes, forecastRes]) => {
-        if (horizonRes) setHorizonData(horizonRes);
-        if (forecastRes && forecastRes.values) setForecastValues(forecastRes.values);
-      })
-      .finally(() => setLoading(false));
-  }, [regionSlug, variable]);
+    const synthPoints = getSynthesizedDifferencePoints(regionSlug, normVar);
+    setPoints(synthPoints);
 
-  // Auto-play lead day progression with Framer Motion
+    // Optionally fetch backend updates
+    let isMounted = true;
+    Promise.all([
+      weatherApi.getHorizon(regionSlug, normVar).catch(() => null),
+      weatherApi.getForecast(regionSlug, normVar).catch(() => null)
+    ]).then(([horizonRes, forecastRes]) => {
+      if (!isMounted) return;
+      if (horizonRes && horizonRes.horizon_days && horizonRes.horizon_days.length > 0) {
+        // Enhance points with live backend data if available
+        const enhanced = synthPoints.map((sp, idx) => {
+          const liveHd = horizonRes.horizon_days.find((h) => h.lead_day === sp.day);
+          if (!liveHd) return sp;
+          return {
+            ...sp,
+            confidence: liveHd.confidence_score ?? sp.confidence,
+            bustProb: liveHd.bust_probability ?? sp.bustProb,
+            expectedMae: liveHd.expected_mae ?? sp.expectedMae,
+            spread: liveHd.model_spread ?? sp.spread,
+            driver: liveHd.primary_uncertainty_driver || sp.driver,
+            isWall: liveHd.is_bust_wall ?? sp.isWall
+          };
+        });
+        setPoints(enhanced);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [regionSlug, normVar]);
+
+  // Auto-play timeline progression
   useEffect(() => {
     if (!isPlaying) return;
     const interval = setInterval(() => {
@@ -91,59 +109,31 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
     return () => clearInterval(interval);
   }, [isPlaying, selectedLeadDay, onSelectLeadDay]);
 
-  if (loading && !horizonData) {
-    return (
-      <div className="w-full rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-8 flex flex-col items-center justify-center space-y-4 animate-pulse">
-        <div className="h-10 w-10 rounded-full border-3 border-[var(--weather-blue)] border-t-transparent animate-spin" />
-        <span className="text-base font-mono text-[var(--weather-blue)] font-bold">
-          Synthesizing Everyday Forecast Differences & Divergence Metrics...
-        </span>
-      </div>
-    );
-  }
+  const unit = normVar === 'rainfall' ? 'mm' : normVar === 'tmax' ? '°C' : normVar === 'wind' ? 'm/s' : 'hPa';
+  const varLabel = normVar === 'rainfall' ? 'Rainfall' : normVar === 'tmax' ? 'Temperature' : normVar === 'wind' ? 'Wind Speed' : 'Pressure (MSLP)';
 
-  // Synthesize 10 days of difference points
-  const days: DayDiffPoint[] = (horizonData?.horizon_days || []).map((hd, idx, arr) => {
-    const dayForecasts = forecastValues.filter((f) => f.lead_day === hd.lead_day);
-    const baseVal = dayForecasts.length > 0 
-      ? dayForecasts.reduce((sum, f) => sum + f.value, 0) / dayForecasts.length 
-      : (variable === 'rainfall' ? 24 - idx * 1.8 : 28 + Math.sin(idx) * 3);
+  const activePoint = useMemo(() => {
+    return points.find((d) => d.day === selectedLeadDay) || points[0];
+  }, [points, selectedLeadDay]);
 
-    const spread = hd.model_spread ?? (idx + 1) * (variable === 'rainfall' ? 1.4 : 0.6);
-    const ecmwfVal = +(baseVal + spread * 0.4).toFixed(1);
-    const gfsVal = +(baseVal - spread * 0.6).toFixed(1);
+  const maxSpread = Math.max(...points.map((d) => d.spread), 5);
+  const maxMae = Math.max(...points.map((d) => d.expectedMae), 5);
+  const maxDelta = Math.max(...points.map((d) => Math.abs(d.dayOverDayDelta)), 5);
 
-    let dayOverDayDelta = 0;
-    if (idx > 0) {
-      const prevDayForecasts = forecastValues.filter((f) => f.lead_day === arr[idx - 1].lead_day);
-      const prevBase = prevDayForecasts.length > 0
-        ? prevDayForecasts.reduce((sum, f) => sum + f.value, 0) / prevDayForecasts.length
-        : baseVal;
-      dayOverDayDelta = +(baseVal - prevBase).toFixed(1);
+  const METRIC_BUTTONS = [
+    { id: 'rainfall' as WeatherVariable, label: 'Rainfall', icon: CloudRain },
+    { id: 'tmax' as WeatherVariable, label: 'Temperature', icon: Thermometer },
+    { id: 'wind' as WeatherVariable, label: 'Wind Speed', icon: Wind },
+    { id: 'mslp' as WeatherVariable, label: 'Pressure', icon: Gauge },
+  ];
+
+  const handleMetricClick = (newVar: WeatherVariable) => {
+    if (onVariableChange) {
+      onVariableChange(newVar);
+    } else {
+      setPoints(getSynthesizedDifferencePoints(regionSlug, normalizeVariable(newVar)));
     }
-
-    return {
-      day: hd.lead_day,
-      dayLabel: `D${hd.lead_day} (${hd.lead_hours}h)`,
-      hours: hd.lead_hours,
-      ecmwfVal,
-      gfsVal,
-      spread: +spread.toFixed(1),
-      dayOverDayDelta,
-      confidence: hd.confidence_score,
-      bustProb: hd.bust_probability,
-      expectedMae: hd.expected_mae,
-      driver: hd.primary_uncertainty_driver,
-      isWall: hd.is_bust_wall || hd.lead_day === (horizonData?.bust_horizon_day ?? 5)
-    };
-  });
-
-  const unit = variable === 'rainfall' ? 'mm' : variable === 'tmax' ? '°C' : variable === 'wind' ? 'm/s' : 'hPa';
-  const activePoint = days.find((d) => d.day === selectedLeadDay) || days[0];
-
-  const maxSpread = Math.max(...days.map((d) => d.spread), 5);
-  const maxMae = Math.max(...days.map((d) => d.expectedMae), 5);
-  const maxDelta = Math.max(...days.map((d) => Math.abs(d.dayOverDayDelta)), 5);
+  };
 
   return (
     <motion.div 
@@ -155,22 +145,47 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
       {/* Title & Mode Switcher - Stacked Pattern */}
       <div className="flex flex-col gap-4 border-b border-[var(--border)] pb-6">
         {/* Top Section: Title & Badges */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <span className="p-2.5 rounded-2xl bg-[var(--weather-blue)]/15 text-[var(--weather-blue)] border border-[var(--weather-blue)]/30 shrink-0">
-              <BarChart3 className="h-6 w-6 text-[var(--weather-blue)]" />
-            </span>
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[var(--text-primary)] tracking-tight">
-              Everyday Forecast Difference & Model Divergence
-            </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-3">
+              <span className="p-2.5 rounded-2xl bg-[var(--weather-blue)]/15 text-[var(--weather-blue)] border border-[var(--weather-blue)]/30 shrink-0">
+                <BarChart3 className="h-6 w-6 text-[var(--weather-blue)]" />
+              </span>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[var(--text-primary)] tracking-tight">
+                Everyday Forecast Difference & Model Divergence
+              </h2>
+            </div>
+            <p className="text-sm sm:text-base text-[var(--text-secondary)] font-medium pl-1 flex flex-wrap items-center gap-2.5 leading-relaxed">
+              <span>Evaluating inter-model divergence & day-over-day flip-flops for <strong className="text-[var(--text-primary)]">{varLabel}</strong></span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-mono text-[var(--safe-green)] bg-[var(--safe-green)]/15 px-2.5 py-0.5 rounded-full border border-[var(--safe-green)]/30">
+                <Heart className="h-3.5 w-3.5 text-rose-500 fill-rose-500" />
+                Active Recharts Matrix
+              </span>
+            </p>
           </div>
-          <p className="text-base sm:text-lg text-[var(--text-secondary)] font-medium pl-1 flex flex-wrap items-center gap-2.5 leading-relaxed">
-            <span>Tracking inter-model divergence and day-over-day flip-flops across Lead Day 1 to 10</span>
-            <span className="inline-flex items-center gap-1.5 text-xs font-mono text-[var(--safe-green)] bg-[var(--safe-green)]/15 px-2.5 py-0.5 rounded-full border border-[var(--safe-green)]/30">
-              <Heart className="h-3.5 w-3.5 text-rose-500 fill-rose-500" />
-              Recharts Telemetry
-            </span>
-          </p>
+
+          {/* Metric Selector Pills inside Header */}
+          <div className="flex items-center gap-1.5 bg-[var(--muted-surface)] p-1 rounded-2xl border border-[var(--border)] self-start sm:self-auto flex-wrap">
+            {METRIC_BUTTONS.map((m) => {
+              const Icon = m.icon;
+              const isActive = normVar === normalizeVariable(m.id);
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => handleMetricClick(m.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-[var(--weather-blue)] text-white shadow-xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface)]'
+                  }`}
+                  title={`Switch to ${m.label}`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{m.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* View Mode Buttons & Timeline Playback Row Underneath */}
@@ -200,36 +215,40 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
               </button>
             </div>
 
+            {/* Adjacent 3 Filters (Spread, Day Drift, Expected MAE) */}
             <div className="flex items-center gap-1 bg-[var(--muted-surface)] p-1 rounded-2xl border border-[var(--border)]">
               <button
                 onClick={() => setViewMode('spread')}
-                className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   viewMode === 'spread'
-                    ? 'bg-[var(--forecast-blue)] text-white shadow-xs'
+                    ? 'bg-[var(--weather-blue)] text-white shadow-xs'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                ECMWF vs GFS Spread
+                <Activity className="h-3.5 w-3.5" />
+                <span>ECMWF vs GFS Spread</span>
               </button>
               <button
                 onClick={() => setViewMode('day_over_day')}
-                className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   viewMode === 'day_over_day'
-                    ? 'bg-[var(--forecast-blue)] text-white shadow-xs'
+                    ? 'bg-emerald-600 text-white shadow-xs'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                Day Drift
+                <TrendingUp className="h-3.5 w-3.5" />
+                <span>Day Drift</span>
               </button>
               <button
                 onClick={() => setViewMode('mae')}
-                className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   viewMode === 'mae'
-                    ? 'bg-[var(--forecast-blue)] text-white shadow-xs'
+                    ? 'bg-rose-600 text-white shadow-xs'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                Expected MAE
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <span>Expected MAE</span>
               </button>
             </div>
           </div>
@@ -244,34 +263,34 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
             }`}
           >
             {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 text-[var(--weather-blue)]" />}
-            <span>{isPlaying ? 'Pause' : 'Play Timeline'}</span>
+            <span>{isPlaying ? 'Pause Timeline' : 'Play Timeline'}</span>
           </button>
         </div>
       </div>
 
-      {/* Main Interactive Framer-Motion Chart Area */}
+      {/* Main Interactive Chart Container */}
       <div className="p-5 rounded-2xl border border-[var(--border)] bg-[var(--muted-surface)] space-y-6">
         {/* Dynamic Header Metrics for the Active Selected Day */}
         {activePoint && (
           <motion.div 
-            key={activePoint.day}
-            initial={{ opacity: 0, y: -8 }}
+            key={`${activePoint.day}-${normVar}-${viewMode}`}
+            initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.2 }}
             className="grid grid-cols-2 lg:grid-cols-4 gap-4 border-b border-[var(--border)] pb-5"
           >
             {/* Active Day Pill */}
             <div className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] space-y-1">
               <span className="text-xs font-mono uppercase tracking-wider text-[var(--text-secondary)] font-bold block flex items-center gap-1.5">
                 <Calendar className="h-3.5 w-3.5 text-[var(--weather-blue)]" />
-                <span>Active Horizon</span>
+                <span>Active Lead Horizon</span>
               </span>
               <div className="text-2xl sm:text-3xl font-mono font-black text-[var(--weather-blue)] flex items-center gap-2">
                 <span>Day {activePoint.day}</span>
                 <span className="text-xs text-[var(--text-secondary)] font-normal">({activePoint.hours}h)</span>
               </div>
               <p className="text-xs text-[var(--text-secondary)]">
-                {activePoint.isWall ? '⚠️ Predictability Wall boundary' : 'Deterministic evaluation'}
+                {activePoint.isWall ? '⚠️ Predictability Wall boundary' : 'Deterministic forecast horizon'}
               </p>
             </div>
 
@@ -279,7 +298,7 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
             <div className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] space-y-1">
               <span className="text-xs font-mono uppercase tracking-wider text-[var(--text-secondary)] font-bold block flex items-center gap-1.5">
                 <Activity className="h-3.5 w-3.5 text-[var(--risk-watch)]" />
-                <span>Everyday Divergence (Δ)</span>
+                <span>Inter-Model Spread (Δ)</span>
               </span>
               <div className="text-2xl sm:text-3xl font-mono font-black text-[var(--risk-watch)]">
                 {activePoint.spread} <span className="text-sm font-normal text-[var(--text-secondary)]">{unit}</span>
@@ -292,16 +311,16 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
             {/* Day over Day Jump */}
             <div className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] space-y-1">
               <span className="text-xs font-mono uppercase tracking-wider text-[var(--text-secondary)] font-bold block flex items-center gap-1.5">
-                <TrendingUp className="h-3.5 w-3.5 text-[var(--safe-green)]" />
+                <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
                 <span>Day-Over-Day Shift</span>
               </span>
               <div className={`text-2xl sm:text-3xl font-mono font-black ${
-                Math.abs(activePoint.dayOverDayDelta) > 5 ? 'text-[var(--risk-extreme)]' : 'text-[var(--safe-green)]'
+                Math.abs(activePoint.dayOverDayDelta) > 5 ? 'text-[var(--risk-extreme)]' : 'text-emerald-500'
               }`}>
                 {activePoint.dayOverDayDelta > 0 ? `+${activePoint.dayOverDayDelta}` : activePoint.dayOverDayDelta} <span className="text-sm font-normal text-[var(--text-secondary)]">{unit}</span>
               </div>
               <p className="text-xs text-[var(--text-secondary)]">
-                24h trend delta vs Day {Math.max(1, activePoint.day - 1)}
+                24h trend drift vs Day {Math.max(1, activePoint.day - 1)}
               </p>
             </div>
 
@@ -323,20 +342,67 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
           </motion.div>
         )}
 
-        {/* Graphical Representation: Recharts AreaChart or Animated Columns */}
+        {/* Graphical Representation: Reactive Recharts AreaChart for ALL 3 Filter Modes */}
         {chartType === 'area' ? (
-          <div className="space-y-2">
-            <div className="flex justify-between items-center text-xs font-mono text-[var(--text-secondary)]">
-              <span>DAY 1 (24H)</span>
-              <span className="text-[var(--risk-watch)] font-bold">PREDICTABILITY WALL (DAY 5)</span>
-              <span>DAY 10 (240H)</span>
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+              <span className="text-[var(--text-primary)] font-bold flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-[var(--weather-blue)]/15 text-[var(--weather-blue)] border border-[var(--weather-blue)]/30 uppercase">
+                  {viewMode === 'spread' ? 'Mode: ECMWF vs GFS Divergence' : viewMode === 'day_over_day' ? 'Mode: Day-Over-Day Shift & Volatility' : 'Mode: Expected Mean Absolute Error & Bust Risk'}
+                </span>
+                <span className="text-[var(--text-secondary)]">({varLabel} in {unit})</span>
+              </span>
+
+              <div className="flex items-center gap-3">
+                {viewMode === 'spread' && (
+                  <>
+                    <span className="flex items-center gap-1.5 text-[var(--weather-blue)] font-semibold">
+                      <span className="h-2 w-2 rounded-full bg-[var(--weather-blue)]" />
+                      <span>ECMWF IFS</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-cyan-400 font-semibold">
+                      <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                      <span>NOAA GFS</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-amber-400 font-semibold">
+                      <span className="h-2 w-2 rounded-full bg-amber-400" />
+                      <span>Spread (Δ)</span>
+                    </span>
+                  </>
+                )}
+                {viewMode === 'day_over_day' && (
+                  <>
+                    <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                      <span>24h Forecast Drift</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[var(--text-secondary)]">
+                      <span className="h-2 w-2 rounded-full bg-[var(--border)]" />
+                      <span>Zero Baseline</span>
+                    </span>
+                  </>
+                )}
+                {viewMode === 'mae' && (
+                  <>
+                    <span className="flex items-center gap-1.5 text-rose-500 font-semibold">
+                      <span className="h-2 w-2 rounded-full bg-rose-500" />
+                      <span>Expected MAE (±{unit})</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-purple-400 font-semibold">
+                      <span className="h-2 w-2 rounded-full bg-purple-400" />
+                      <span>Bust Probability (%)</span>
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
 
-            <div className="h-72 w-full pt-4">
+            <div className="h-80 w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart 
-                  data={days} 
-                  margin={{ top: 12, right: 12, left: -10, bottom: 6 }}
+                  key={`${normVar}-${viewMode}`}
+                  data={points} 
+                  margin={{ top: 14, right: 14, left: -10, bottom: 6 }}
                   onClick={(e: any) => {
                     if (e && e.activePayload && e.activePayload[0]) {
                       const clickedDay = e.activePayload[0].payload.day;
@@ -345,17 +411,32 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
                   }}
                 >
                   <defs>
+                    {/* Spread Gradients */}
                     <linearGradient id="ecmwfGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--weather-blue)" stopOpacity={0.4} />
+                      <stop offset="5%" stopColor="var(--weather-blue)" stopOpacity={0.45} />
                       <stop offset="95%" stopColor="var(--weather-blue)" stopOpacity={0.02} />
                     </linearGradient>
                     <linearGradient id="gfsGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--forecast-blue)" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="var(--forecast-blue)" stopOpacity={0.02} />
+                      <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#22d3ee" stopOpacity={0.02} />
                     </linearGradient>
-                    <linearGradient id="spreadGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#BA6A6A" stopOpacity={0.45} />
-                      <stop offset="95%" stopColor="#BA6A6A" stopOpacity={0.05} />
+                    <linearGradient id="spreadAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.02} />
+                    </linearGradient>
+                    {/* Day Drift Gradients */}
+                    <linearGradient id="driftGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.45} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+                    </linearGradient>
+                    {/* MAE Gradients */}
+                    <linearGradient id="maeGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.45} />
+                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="bustGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#a855f7" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#a855f7" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
 
@@ -369,60 +450,170 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
                     axisLine={{ stroke: 'var(--border)' }}
                   />
 
-                  <YAxis 
-                    stroke="var(--text-secondary)" 
-                    fontSize={11} 
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v) => `${v}${unit}`}
+                  {/* Mode-Specific Y-Axis */}
+                  {viewMode === 'mae' ? (
+                    <YAxis 
+                      stroke="var(--text-secondary)" 
+                      fontSize={11} 
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v) => `±${v}${unit}`}
+                    />
+                  ) : viewMode === 'day_over_day' ? (
+                    <YAxis 
+                      stroke="var(--text-secondary)" 
+                      fontSize={11} 
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v) => `${v > 0 ? '+' : ''}${v}${unit}`}
+                    />
+                  ) : (
+                    <YAxis 
+                      stroke="var(--text-secondary)" 
+                      fontSize={11} 
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v) => `${v}${unit}`}
+                    />
+                  )}
+
+                  {/* Active Selected Day Marker Line */}
+                  <ReferenceLine 
+                    x={activePoint.dayLabel} 
+                    stroke="var(--weather-blue)" 
+                    strokeWidth={2.5} 
+                    strokeDasharray="3 3"
+                    label={{ value: `ACTIVE D${activePoint.day}`, fill: 'var(--weather-blue)', fontSize: 10, position: 'insideTopLeft' }} 
                   />
 
+                  {/* Wall Reference Line */}
+                  <ReferenceLine 
+                    x="D5 (120h)" 
+                    stroke="var(--risk-extreme)" 
+                    strokeDasharray="4 4" 
+                    label={{ value: 'WALL', fill: 'var(--risk-extreme)', fontSize: 10, position: 'top' }} 
+                  />
+
+                  {/* Zero Drift Line in Day Drift mode */}
+                  {viewMode === 'day_over_day' && (
+                    <ReferenceLine y={0} stroke="var(--text-secondary)" strokeWidth={1.5} label={{ value: '0 DRIFT', fill: 'var(--text-secondary)', fontSize: 9, position: 'right' }} />
+                  )}
+
+                  {/* Dynamic Tooltip */}
                   <Tooltip
                     content={({ active, payload }) => {
                       if (!active || !payload || !payload.length) return null;
                       const d = payload[0].payload as DayDiffPoint;
                       return (
-                        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-2xl text-xs font-mono space-y-1.5">
-                          <div className="font-bold text-[var(--text-primary)] text-sm flex items-center justify-between gap-4">
+                        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3.5 shadow-2xl text-xs font-mono space-y-1.5 min-w-[200px]">
+                          <div className="font-bold text-[var(--text-primary)] text-sm flex items-center justify-between gap-4 border-b border-[var(--border)] pb-1.5">
                             <span>Day {d.day} ({d.hours}h)</span>
-                            <span className={`px-2 py-0.5 rounded text-[10px] ${d.isWall ? 'bg-[var(--risk-extreme)]/20 text-[var(--risk-extreme)]' : 'bg-[var(--safe-green)]/20 text-[var(--safe-green)]'}`}>
-                              {d.isWall ? 'Wall Exceeded' : 'Reliable'}
+                            <span className={`px-2 py-0.5 rounded text-[10px] ${d.day === selectedLeadDay ? 'bg-[var(--weather-blue)]/20 text-[var(--weather-blue)] font-bold' : ''}`}>
+                              {d.day === selectedLeadDay ? 'Selected' : 'Click to inspect'}
                             </span>
                           </div>
-                          <div className="text-[var(--weather-blue)]">ECMWF IFS: {d.ecmwfVal} {unit}</div>
-                          <div className="text-[var(--forecast-blue)]">NOAA GFS: {d.gfsVal} {unit}</div>
-                          <div className="text-[var(--risk-watch)] font-bold">Inter-Model Spread: {d.spread} {unit}</div>
-                          <div className="text-[var(--text-secondary)]">Bust Probability: {d.bustProb.toFixed(1)}%</div>
-                          <div className="text-[10px] text-[var(--text-secondary)] italic border-t border-[var(--border)] pt-1">
-                            Click point to inspect
+
+                          {viewMode === 'spread' && (
+                            <>
+                              <div className="text-[var(--weather-blue)] font-bold">ECMWF IFS: {d.ecmwfVal} {unit}</div>
+                              <div className="text-cyan-400 font-bold">NOAA GFS: {d.gfsVal} {unit}</div>
+                              <div className="text-amber-400 font-bold pt-1 border-t border-[var(--border)]">
+                                Inter-Model Spread: {d.spread} {unit}
+                              </div>
+                            </>
+                          )}
+
+                          {viewMode === 'day_over_day' && (
+                            <>
+                              <div className="text-emerald-400 font-bold">
+                                24h Forecast Drift: {d.dayOverDayDelta > 0 ? `+${d.dayOverDayDelta}` : d.dayOverDayDelta} {unit}
+                              </div>
+                              <div className="text-[var(--text-secondary)]">ECMWF Value: {d.ecmwfVal} {unit}</div>
+                              <div className="text-[var(--text-secondary)]">GFS Value: {d.gfsVal} {unit}</div>
+                            </>
+                          )}
+
+                          {viewMode === 'mae' && (
+                            <>
+                              <div className="text-rose-500 font-bold">Expected MAE: ±{d.expectedMae} {unit}</div>
+                              <div className="text-purple-400 font-bold">Bust Probability: {d.bustProb.toFixed(1)}%</div>
+                              <div className="text-[var(--weather-blue)]">Confidence Score: {d.confidence.toFixed(1)}%</div>
+                            </>
+                          )}
+
+                          <div className="text-[10px] text-[var(--text-secondary)] pt-1 border-t border-[var(--border)] italic">
+                            Uncertainty: {d.driver}
                           </div>
                         </div>
                       );
                     }}
                   />
 
-                  <ReferenceLine x="D5 (120h)" stroke="var(--risk-extreme)" strokeDasharray="3 3" label={{ value: 'WALL', fill: 'var(--risk-extreme)', fontSize: 10, position: 'top' }} />
+                  {/* 1. SPREAD MODE RENDERING */}
+                  {viewMode === 'spread' && (
+                    <>
+                      <Area
+                        type="monotone"
+                        dataKey="ecmwfVal"
+                        name="ECMWF IFS"
+                        stroke="var(--weather-blue)"
+                        strokeWidth={2.5}
+                        fill="url(#ecmwfGradient)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="gfsVal"
+                        name="NOAA GFS"
+                        stroke="#22d3ee"
+                        strokeWidth={2}
+                        strokeDasharray="4 4"
+                        fill="url(#gfsGradient)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="spread"
+                        name="Spread (Δ)"
+                        stroke="#f59e0b"
+                        strokeWidth={2}
+                        fill="url(#spreadAreaGrad)"
+                      />
+                    </>
+                  )}
 
-                  {/* ECMWF IFS Area */}
-                  <Area
-                    type="monotone"
-                    dataKey="ecmwfVal"
-                    name="ECMWF IFS"
-                    stroke="var(--weather-blue)"
-                    strokeWidth={2.5}
-                    fill="url(#ecmwfGradient)"
-                  />
+                  {/* 2. DAY DRIFT MODE RENDERING */}
+                  {viewMode === 'day_over_day' && (
+                    <Area
+                      type="monotone"
+                      dataKey="dayOverDayDelta"
+                      name="Day Drift"
+                      stroke="#10b981"
+                      strokeWidth={2.5}
+                      fill="url(#driftGrad)"
+                    />
+                  )}
 
-                  {/* NOAA GFS Area */}
-                  <Area
-                    type="monotone"
-                    dataKey="gfsVal"
-                    name="NOAA GFS"
-                    stroke="var(--forecast-blue)"
-                    strokeWidth={2}
-                    strokeDasharray="4 4"
-                    fill="url(#gfsGradient)"
-                  />
+                  {/* 3. MAE MODE RENDERING */}
+                  {viewMode === 'mae' && (
+                    <>
+                      <Area
+                        type="monotone"
+                        dataKey="expectedMae"
+                        name="Expected MAE"
+                        stroke="#f43f5e"
+                        strokeWidth={2.5}
+                        fill="url(#maeGrad)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="bustProb"
+                        name="Bust Probability"
+                        stroke="#a855f7"
+                        strokeWidth={2}
+                        strokeDasharray="3 3"
+                        fill="url(#bustGrad)"
+                      />
+                    </>
+                  )}
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -446,7 +637,7 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
                 </span>
               </div>
 
-              {days.map((d) => {
+              {points.map((d) => {
                 const isSelected = d.day === selectedLeadDay;
                 let metricVal = d.spread;
                 let maxBound = maxSpread;
@@ -455,7 +646,7 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
                 if (viewMode === 'day_over_day') {
                   metricVal = Math.abs(d.dayOverDayDelta);
                   maxBound = maxDelta;
-                  barColor = d.dayOverDayDelta >= 0 ? 'from-[var(--risk-watch)] to-[var(--risk-high)]' : 'from-[var(--weather-blue)] to-[var(--ai-indigo)]';
+                  barColor = d.dayOverDayDelta >= 0 ? 'from-emerald-500 to-teal-400' : 'from-rose-500 to-amber-500';
                 } else if (viewMode === 'mae') {
                   metricVal = d.expectedMae;
                   maxBound = maxMae;
@@ -489,7 +680,7 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
                         }}
                         className={`w-full rounded-t-xl bg-gradient-to-t ${barColor} transition-all ${
                           isSelected 
-                            ? 'brightness-125 shadow-md border-2 border-[var(--border)]' 
+                            ? 'brightness-125 shadow-md border-2 border-[var(--border)] ring-2 ring-[var(--weather-blue)]/50' 
                             : 'opacity-85 hover:opacity-100'
                         }`}
                       />
@@ -516,7 +707,7 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
         {/* Explainability Bar for the Active Selected Day */}
         <AnimatePresence mode="wait">
           <motion.div
-            key={activePoint.day}
+            key={`${activePoint.day}-${normVar}-${viewMode}`}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}

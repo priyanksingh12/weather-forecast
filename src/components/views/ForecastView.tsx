@@ -31,7 +31,7 @@ export const ForecastView: React.FC<ForecastViewProps> = ({
 
   const VARIABLES = [
     { id: 'rainfall' as WeatherVariable, label: 'Rainfall (24h)', icon: CloudRain, unit: 'mm' },
-    { id: 'temperature' as WeatherVariable, label: 'Temperature', icon: Thermometer, unit: '°C' },
+    { id: 'tmax' as WeatherVariable, label: 'Temperature', icon: Thermometer, unit: '°C' },
     { id: 'wind' as WeatherVariable, label: 'Wind Speed', icon: Wind, unit: 'm/s' },
     { id: 'mslp' as WeatherVariable, label: 'Pressure (MSLP)', icon: Gauge, unit: 'hPa' },
   ];
@@ -135,6 +135,7 @@ export const ForecastView: React.FC<ForecastViewProps> = ({
         variable={variable}
         selectedDay={selectedDay}
         onSelectDay={setSelectedDay}
+        onVariableChange={setVariable}
       />
 
       {/* Everyday Difference Chart */}
@@ -143,6 +144,7 @@ export const ForecastView: React.FC<ForecastViewProps> = ({
         variable={variable}
         selectedLeadDay={selectedDay}
         onSelectLeadDay={setSelectedDay}
+        onVariableChange={setVariable}
       />
     </div>
   );

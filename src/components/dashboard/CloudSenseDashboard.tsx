@@ -45,6 +45,7 @@ interface CloudSenseDashboardProps {
   selectedRegionSlug: string;
   onSelectRegion: (slug: string) => void;
   activeViewTab?: string;
+  onNavigateTab?: (tab: string) => void;
   onOpenReportModal?: () => void;
 }
 
@@ -52,6 +53,7 @@ export const CloudSenseDashboard: React.FC<CloudSenseDashboardProps> = ({
   selectedRegionSlug,
   onSelectRegion,
   activeViewTab = 'dashboard',
+  onNavigateTab,
   onOpenReportModal,
 }) => {
   const [variable, setVariable] = useState<WeatherVariable>('rainfall');
@@ -59,6 +61,14 @@ export const CloudSenseDashboard: React.FC<CloudSenseDashboardProps> = ({
   const [showDeepIntelligence, setShowDeepIntelligence] = useState(false);
   const [modal3dOpen, setModal3dOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
+
+  const handleNavigateToAnalytics = () => {
+    if (onNavigateTab) {
+      onNavigateTab('analytics');
+    } else {
+      setShowDeepIntelligence(true);
+    }
+  };
 
   // Region static-calibrated data fallback + live data sync
   const regionData = getRegionalData(selectedRegionSlug);
@@ -156,7 +166,7 @@ export const CloudSenseDashboard: React.FC<CloudSenseDashboardProps> = ({
             expectedIntensity={regionData.expectedIntensity}
             timeWindow={regionData.timeWindow}
             affectedAreas={regionData.affectedAreas}
-            onViewDetailedAnalysis={() => setShowDeepIntelligence(true)}
+            onViewDetailedAnalysis={handleNavigateToAnalytics}
           />
         </div>
       </section>
@@ -230,6 +240,7 @@ export const CloudSenseDashboard: React.FC<CloudSenseDashboardProps> = ({
               variable={variable}
               selectedLeadDay={day}
               onSelectLeadDay={setDay}
+              onVariableChange={setVariable}
             />
 
             <HorizonPredictabilityWall
@@ -237,6 +248,7 @@ export const CloudSenseDashboard: React.FC<CloudSenseDashboardProps> = ({
               variable={variable}
               selectedDay={day}
               onSelectDay={setDay}
+              onVariableChange={setVariable}
             />
 
             <GroundTruthVerification

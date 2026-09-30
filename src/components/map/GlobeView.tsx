@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { BustMapGeoJSON, WeatherVariable } from '../../lib/api/types';
 import { INDIA_REGIONS } from '../../lib/geo/indiaGeoJson';
+import { getRegionalData } from '../../lib/data/regionalIntelligence';
 import { Layers, RotateCw, AlertTriangle } from 'lucide-react';
 import { getBustColor } from '../../lib/utils/colors';
 
@@ -16,13 +17,43 @@ interface Props {
   day: number;
 }
 
+function buildDefaultIndiaFeatures(): any {
+  return {
+    type: 'FeatureCollection',
+    features: INDIA_REGIONS.map((r) => {
+      const reg = getRegionalData(r.id);
+      return {
+        type: 'Feature',
+        properties: {
+          region_id: r.id,
+          name_en: r.name_en,
+          name_hi: r.name_hi,
+          p_bust_cal: (reg.burstProbability || 40) / 100,
+        },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [r.bbox[0], r.bbox[1]],
+              [r.bbox[2], r.bbox[1]],
+              [r.bbox[2], r.bbox[3]],
+              [r.bbox[0], r.bbox[3]],
+              [r.bbox[0], r.bbox[1]],
+            ],
+          ],
+        },
+      };
+    }),
+  };
+}
+
 export const GlobeView: React.FC<Props> = ({
   mapData,
   selectedRegionId,
   onSelectRegion,
   variable,
   onVariableChange,
-  day
+  day,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<maplibregl.Map | null>(null);
@@ -41,42 +72,55 @@ export const GlobeView: React.FC<Props> = ({
         container: mapContainerRef.current,
         style: {
           version: 8,
-          sources: {},
+          sources: {
+            'carto-dark-basemap': {
+              type: 'raster',
+              tiles: [
+                'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png',
+                'https://b.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png',
+                'https://c.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png',
+              ],
+              tileSize: 256,
+              attribution: '&copy; OpenStreetMap &copy; CARTO',
+            },
+          },
           layers: [
             {
-              id: 'background',
-              type: 'background',
-              paint: {
-                'background-color': '#03050c'
-              }
-            }
-          ]
+              id: 'carto-dark-layer',
+              type: 'raster',
+              source: 'carto-dark-basemap',
+              minzoom: 0,
+              maxzoom: 18,
+            },
+          ],
         },
         center: [78.9, 22.0],
-        zoom: 2.5,
+        zoom: 2.8,
         minZoom: 1.5,
         maxZoom: 8.0,
-        attributionControl: false
+        attributionControl: false,
       });
 
-      // Set projection safely only after style is loaded
+      // Enable 3D Globe Projection
       map.on('style.load', () => {
         try {
           if (typeof (map as any).setProjection === 'function') {
             (map as any).setProjection({ type: 'globe' });
           }
         } catch (projErr) {
-          // Fallback seamlessly to Mercator
+          console.warn('Globe projection fallback to standard Web Mercator:', projErr);
         }
       });
 
       map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'bottom-right');
 
       map.on('load', () => {
+        const initialGeoData = mapData || buildDefaultIndiaFeatures();
+
         // Add GeoJSON
         map.addSource('globe-bust-source', {
           type: 'geojson',
-          data: (mapData as any) || { type: 'FeatureCollection', features: [] }
+          data: initialGeoData as any,
         });
 
         // 3D Choropleth Fill
@@ -93,22 +137,22 @@ export const GlobeView: React.FC<Props> = ({
               0.25, '#0284c7',
               0.45, '#f59e0b',
               0.65, '#f97316',
-              0.85, '#f43f5e'
+              0.85, '#f43f5e',
             ],
-            'fill-opacity': 0.75
-          }
+            'fill-opacity': 0.65,
+          },
         });
 
-        // Outlines
+        // Glowing Outlines
         map.addLayer({
           id: 'globe-regions-line',
           type: 'line',
           source: 'globe-bust-source',
           paint: {
             'line-color': '#38bdf8',
-            'line-width': 1.2,
-            'line-opacity': 0.6
-          }
+            'line-width': 1.6,
+            'line-opacity': 0.8,
+          },
         });
 
         // Click to select region
@@ -144,11 +188,11 @@ export const GlobeView: React.FC<Props> = ({
 
   // Update source data when mapData changes
   useEffect(() => {
-    if (!mapInstanceRef.current || !mapData) return;
+    if (!mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
     if (map.isStyleLoaded() && map.getSource('globe-bust-source')) {
       const src = map.getSource('globe-bust-source') as maplibregl.GeoJSONSource;
-      src.setData(mapData as any);
+      src.setData((mapData || buildDefaultIndiaFeatures()) as any);
     }
   }, [mapData]);
 
@@ -157,33 +201,33 @@ export const GlobeView: React.FC<Props> = ({
       mapInstanceRef.current.flyTo({
         center: [78.9, 22.0],
         zoom: 3.2,
-        duration: 1500
+        duration: 1500,
       });
     }
   };
 
   if (!webGlSupported) {
     return (
-      <div className="w-full h-[650px] rounded-3xl border border-[var(--risk-extreme)]/30 bg-[var(--surface)] flex flex-col items-center justify-center p-6 text-center space-y-3">
+      <div className="w-full h-full min-h-[550px] rounded-3xl border border-[var(--risk-extreme)]/30 bg-[var(--surface)] flex flex-col items-center justify-center p-6 text-center space-y-3">
         <AlertTriangle className="h-10 w-10 text-[var(--risk-watch)]" />
         <h3 className="text-base font-semibold text-[var(--text-primary)]">WebGL Globe Rendering Degraded</h3>
         <p className="text-xs text-[var(--text-secondary)] max-w-md">
-          Your browser or graphics hardware could not initialize the 3D globe pipeline. Switching automatically to the 2D National View map engine.
+          Your browser or graphics hardware could not initialize the 3D globe pipeline. Switching automatically to standard map engine.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="relative w-full h-[680px] rounded-3xl overflow-hidden border border-[var(--border)] shadow-2xl bg-[var(--surface)]">
-      <div ref={mapContainerRef} className="w-full h-full" />
+    <div className="relative w-full h-full min-h-[550px] rounded-3xl overflow-hidden border border-[var(--border)] shadow-2xl bg-[#03050c]">
+      <div ref={mapContainerRef} className="w-full h-full min-h-[550px]" />
 
       {/* Floating Globe Layer Controls */}
       <div className="absolute top-4 left-4 z-20 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-xl p-3 shadow-2xl space-y-2.5">
         <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-secondary)] gap-4">
           <span className="flex items-center gap-1.5 text-[var(--weather-blue)]">
             <Layers className="h-4 w-4" />
-            <span>Globe Layers</span>
+            <span>Globe Atmosphere</span>
           </span>
           <button
             onClick={rotateToIndia}
@@ -206,7 +250,7 @@ export const GlobeView: React.FC<Props> = ({
                 : 'bg-[var(--muted-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
           >
-            Bust Probability
+            Bust Risk
           </button>
 
           <button
@@ -255,7 +299,7 @@ export const GlobeView: React.FC<Props> = ({
 
       {/* Floating Instructions */}
       <div className="absolute bottom-4 left-4 z-10 text-[11px] text-[var(--text-secondary)] bg-[var(--surface)]/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[var(--border)] pointer-events-none">
-        Drag to rotate globe · Scroll to zoom · Click any region to inspect reliability
+        Drag to rotate 3D Earth globe · Scroll to zoom · Click region for risk analysis
       </div>
     </div>
   );

@@ -26,6 +26,7 @@ interface SidebarProps {
   mobileOpen?: boolean;
   onMobileClose?: () => void;
   onOpenReportModal?: () => void;
+  alertCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -33,7 +34,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onTabChange,
   mobileOpen = false,
   onMobileClose,
-  onOpenReportModal
+  onOpenReportModal,
+  alertCount,
 }) => {
   const pathname = usePathname();
 
@@ -44,7 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'burst', label: 'Burst Detection', icon: Activity },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'locations', label: 'Locations', icon: MapPin },
-    { id: 'alerts', label: 'Alerts', icon: Bell, badge: 3 },
+    { id: 'alerts', label: 'Alerts', icon: Bell, badge: alertCount !== undefined ? alertCount : undefined },
     { id: 'reports', label: 'Reports', icon: FileText, isAction: true },
   ];
 

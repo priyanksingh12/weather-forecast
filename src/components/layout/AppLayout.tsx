@@ -5,6 +5,8 @@ import { Sidebar } from './Sidebar';
 import { TopHeader } from './TopHeader';
 import { ReportModal } from '../reports/ReportModal';
 import { DataFreshnessModal } from '../status/DataFreshnessModal';
+import { getRegionalData } from '../../lib/data/regionalIntelligence';
+import { getRegionalAlerts } from '../../lib/data/alertIntelligence';
 
 interface AppLayoutContextType {
   selectedRegion: string;
@@ -33,6 +35,11 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
 
+  // Compute dynamic state-specific alert count
+  const currentRegionData = getRegionalData(selectedRegion);
+  const activeAlerts = getRegionalAlerts(currentRegionData);
+  const alertCount = activeAlerts.length;
+
   return (
     <AppLayoutContext.Provider
       value={{
@@ -57,6 +64,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
           mobileOpen={mobileMenuOpen}
           onMobileClose={() => setMobileMenuOpen(false)}
           onOpenReportModal={() => setReportModalOpen(true)}
+          alertCount={alertCount}
         />
 
         {/* 2. Main Content Canvas: Fills remaining width perfectly */}
