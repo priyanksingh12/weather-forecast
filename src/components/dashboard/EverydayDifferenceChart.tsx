@@ -77,8 +77,9 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
     ]).then(([horizonRes, forecastRes]) => {
       if (!isMounted) return;
       if (horizonRes && horizonRes.horizon_days && horizonRes.horizon_days.length > 0) {
-        // Enhance points with live backend data if available
-        const enhanced = synthPoints.map((sp, idx) => {
+        const expectedWall = normVar === 'wind' ? 4 : normVar === 'tmax' ? 6 : normVar === 'mslp' ? 7 : 5;
+        // Enhance points with live backend data if available while preserving metric-calibrated bust wall
+        const enhanced = synthPoints.map((sp) => {
           const liveHd = horizonRes.horizon_days.find((h) => h.lead_day === sp.day);
           if (!liveHd) return sp;
           return {
@@ -88,7 +89,7 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
             expectedMae: liveHd.expected_mae ?? sp.expectedMae,
             spread: liveHd.model_spread ?? sp.spread,
             driver: liveHd.primary_uncertainty_driver || sp.driver,
-            isWall: liveHd.is_bust_wall ?? sp.isWall
+            isWall: sp.day === expectedWall
           };
         });
         setPoints(enhanced);
@@ -108,6 +109,10 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
     }, 1800);
     return () => clearInterval(interval);
   }, [isPlaying, selectedLeadDay, onSelectLeadDay]);
+
+  const wallDay = useMemo(() => {
+    return normVar === 'wind' ? 4 : normVar === 'tmax' ? 6 : normVar === 'mslp' ? 7 : 5;
+  }, [normVar]);
 
   const unit = normVar === 'rainfall' ? 'mm' : normVar === 'tmax' ? '°C' : normVar === 'wind' ? 'm/s' : 'hPa';
   const varLabel = normVar === 'rainfall' ? 'Rainfall' : normVar === 'tmax' ? 'Temperature' : normVar === 'wind' ? 'Wind Speed' : 'Pressure (MSLP)';
@@ -488,10 +493,10 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
 
                   {/* Wall Reference Line */}
                   <ReferenceLine 
-                    x="D5 (120h)" 
+                    x={`D${wallDay} (${wallDay * 24}h)`} 
                     stroke="var(--risk-extreme)" 
                     strokeDasharray="4 4" 
-                    label={{ value: 'WALL', fill: 'var(--risk-extreme)', fontSize: 10, position: 'top' }} 
+                    label={{ value: `WALL (D${wallDay})`, fill: 'var(--risk-extreme)', fontSize: 10, position: 'top' }} 
                   />
 
                   {/* Zero Drift Line in Day Drift mode */}
@@ -623,16 +628,19 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
           <div className="space-y-2">
             <div className="flex justify-between items-center text-xs font-mono text-[var(--text-secondary)]">
               <span>DAY 1 (24H)</span>
-              <span className="text-[var(--risk-watch)] font-bold">PREDICTABILITY WALL (DAY 5)</span>
+              <span className="text-[var(--risk-watch)] font-bold">PREDICTABILITY WALL (DAY {wallDay})</span>
               <span>DAY 10 (240H)</span>
             </div>
 
             <div className="h-64 sm:h-72 w-full flex items-end justify-between gap-2 sm:gap-3 pt-6 pb-2 border-b border-[var(--border)] relative">
-              <div className="absolute top-0 bottom-0 left-[48%] w-[2px] bg-[var(--risk-extreme)]/60 border-l border-dashed border-[var(--risk-extreme)] pointer-events-none z-10 flex flex-col justify-between">
-                <span className="bg-[var(--risk-extreme)] text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow self-center -mt-2 uppercase">
-                  Wall
+              <div 
+                className="absolute top-0 bottom-0 w-[2px] bg-[var(--risk-extreme)]/60 border-l border-dashed border-[var(--risk-extreme)] pointer-events-none z-10 flex flex-col justify-between transition-all duration-300"
+                style={{ left: `${((wallDay - 0.45) / 10) * 100}%` }}
+              >
+                <span className="bg-[var(--risk-extreme)] text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow self-center -mt-2 uppercase whitespace-nowrap">
+                  Wall (D{wallDay})
                 </span>
-                <span className="bg-[var(--risk-extreme)]/20 text-[var(--risk-extreme)] text-[9px] font-mono px-1 py-0.5 rounded border border-[var(--risk-extreme)]/40 self-center mb-1">
+                <span className="bg-[var(--risk-extreme)]/20 text-[var(--risk-extreme)] text-[9px] font-mono px-1 py-0.5 rounded border border-[var(--risk-extreme)]/40 self-center mb-1 whitespace-nowrap">
                   &gt;50% Bust
                 </span>
               </div>
@@ -650,7 +658,7 @@ export const EverydayDifferenceChart: React.FC<Props> = ({
                 } else if (viewMode === 'mae') {
                   metricVal = d.expectedMae;
                   maxBound = maxMae;
-                  barColor = d.day > 5 ? 'from-[var(--risk-high)] to-[var(--risk-extreme)]' : 'from-[var(--safe-green)] to-[var(--atmospheric-teal)]';
+                  barColor = d.day >= wallDay ? 'from-[var(--risk-high)] to-[var(--risk-extreme)]' : 'from-[var(--safe-green)] to-[var(--atmospheric-teal)]';
                 }
 
                 const heightPct = Math.min(100, Math.max(12, (metricVal / (maxBound || 1)) * 100));

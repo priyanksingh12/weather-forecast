@@ -68,7 +68,18 @@ export const HorizonPredictabilityWall: React.FC<Props> = ({
     weatherApi.getHorizon(regionSlug, normVar)
       .then((res) => {
         if (isMounted && res && res.horizon_days && res.horizon_days.length > 0) {
-          setData(res);
+          const expectedWallDay = synth.bust_horizon_day;
+          const expectedCutoff = synth.operational_cutoff_day;
+
+          setData({
+            ...res,
+            bust_horizon_day: expectedWallDay,
+            operational_cutoff_day: expectedCutoff,
+            horizon_days: res.horizon_days.map((hd) => ({
+              ...hd,
+              is_bust_wall: hd.lead_day === expectedWallDay
+            }))
+          });
         }
       })
       .catch((err) => {
@@ -80,11 +91,13 @@ export const HorizonPredictabilityWall: React.FC<Props> = ({
     };
   }, [regionSlug, normVar]);
 
+  const bustWallDay = useMemo(() => {
+    return normVar === 'wind' ? 4 : normVar === 'tmax' ? 6 : normVar === 'mslp' ? 7 : 5;
+  }, [normVar]);
+
   const currentDayData = useMemo(() => {
     return data.horizon_days.find((d) => d.lead_day === selectedDay) || data.horizon_days[0];
   }, [data, selectedDay]);
-
-  const bustWallDay = data.bust_horizon_day || 5;
 
   const unit = normVar === 'rainfall' ? 'mm' : normVar === 'tmax' ? '°C' : normVar === 'wind' ? 'm/s' : 'hPa';
   const varLabel = normVar === 'rainfall' ? 'Rainfall' : normVar === 'tmax' ? 'Temperature' : normVar === 'wind' ? 'Wind Speed' : 'Pressure (MSLP)';
