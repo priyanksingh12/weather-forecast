@@ -18,6 +18,7 @@ import dynamic from 'next/dynamic';
 import { RegionalData } from '../../lib/data/regionalIntelligence';
 import { LocationQuickPicker } from '../common/LocationQuickPicker';
 import { OwmLayerId, OWM_LAYERS } from '../radar/radarTypes';
+import { RadarColorGradeBar } from '../radar/RadarColorGradeBar';
 
 // Dynamic import for 3D India Weather Map (Three.js extruded states, rain particles, wind streamlines)
 const IndiaWeatherMap = dynamic(
@@ -156,19 +157,36 @@ export const LiveRadarCard: React.FC<LiveRadarCardProps> = ({
       {/* Layer Switcher Pills (visible in 2D radar mode) */}
       {viewMode === 'radar-2d' && (
         <div className="py-2.5 flex flex-wrap gap-1.5">
-          {OWM_LAYERS.map((layer) => (
-            <button
-              key={layer.id}
-              onClick={() => setActiveLayer(layer.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                activeLayer === layer.id
-                  ? 'bg-sky-600 text-white shadow-lg shadow-sky-500/30 border border-sky-400'
-                  : 'bg-[var(--muted-surface)] text-[var(--text-secondary)] hover:text-sky-300 border border-[var(--border)] hover:border-sky-400/40'
-              }`}
-            >
-              {layer.label}
-            </button>
-          ))}
+          {OWM_LAYERS.map((layer) => {
+            const isActive = activeLayer === layer.id;
+            let activeStyle = 'bg-sky-600 text-white shadow-lg shadow-sky-500/30 border-sky-400';
+            if (layer.id === 'temp_new') {
+              activeStyle = 'bg-amber-600 text-white shadow-lg shadow-amber-500/30 border-amber-400';
+            } else if (layer.id === 'wind_new') {
+              activeStyle = 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30 border-emerald-400';
+            } else if (layer.id === 'pressure_new') {
+              activeStyle = 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 border-blue-400';
+            } else if (layer.id === 'clouds_new') {
+              activeStyle = 'bg-slate-700 text-white shadow-lg shadow-slate-500/30 border-slate-400';
+            }
+
+            return (
+              <button
+                key={layer.id}
+                onClick={() => setActiveLayer(layer.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                  isActive
+                    ? activeStyle
+                    : 'bg-[var(--muted-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border-[var(--border)] hover:border-[var(--weather-blue)]/40'
+                }`}
+              >
+                <span>{layer.label}</span>
+                {isActive && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -207,6 +225,13 @@ export const LiveRadarCard: React.FC<LiveRadarCardProps> = ({
           />
         )}
       </div>
+
+      {/* Dynamic Radar Color Grade & Spatial Telemetry Bar */}
+      <RadarColorGradeBar
+        activeLayer={activeLayer}
+        currentRegion={currentRegion}
+        className="mt-3.5"
+      />
 
       {/* Footer */}
       <div className="mt-3 flex items-center justify-between text-[10px] sm:text-xs text-[var(--text-secondary)]">

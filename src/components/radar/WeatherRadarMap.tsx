@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { OwmLayerId, OWM_KEY } from './radarTypes';
+import { RADAR_COLOR_GRADES } from './radarColorGrades';
 
 interface WeatherRadarMapProps {
   center: [number, number];
@@ -26,6 +27,8 @@ export const WeatherRadarMap: React.FC<WeatherRadarMapProps> = ({
   const markerRef = useRef<any>(null);
   const leafletModuleRef = useRef<any>(null);
   const [isReady, setIsReady] = useState(false);
+
+  const grade = RADAR_COLOR_GRADES[activeLayer] || RADAR_COLOR_GRADES.precipitation_new;
 
   // Initialize Leaflet Map on Client-side only
   useEffect(() => {
@@ -166,6 +169,30 @@ export const WeatherRadarMap: React.FC<WeatherRadarMapProps> = ({
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0f1a24] text-[var(--weather-blue)] space-y-2 z-10 pointer-events-none">
           <div className="h-8 w-8 rounded-full border-2 border-[var(--weather-blue)] border-t-transparent animate-spin" />
           <span className="text-xs font-mono font-bold">Loading Live Radar Tiles...</span>
+        </div>
+      )}
+
+      {/* Floating In-Map Quick Grade Bar */}
+      {isReady && grade && (
+        <div className="absolute bottom-3 left-3 z-[400] bg-[#0b131e]/90 backdrop-blur-md px-3 py-2 rounded-xl border border-white/20 shadow-2xl flex flex-col gap-1 pointer-events-auto max-w-[240px] sm:max-w-[280px]">
+          <div className="flex items-center justify-between text-[10px] font-mono font-bold text-slate-200">
+            <span className="flex items-center gap-1.5 truncate">
+              <span
+                className="h-2 w-2 rounded-full shrink-0"
+                style={{ backgroundColor: grade.stops[grade.stops.length - 2]?.color || '#00e5ff' }}
+              />
+              <span className="truncate">{grade.variableName} Scale</span>
+            </span>
+            <span className="text-cyan-400 shrink-0 ml-2">{grade.unit}</span>
+          </div>
+          <div
+            className="h-2 w-full rounded-full border border-white/20 shadow-inner"
+            style={{ background: grade.gradientCss }}
+          />
+          <div className="flex justify-between text-[9px] font-mono font-bold text-slate-400">
+            <span className="text-cyan-300">{grade.stops[0]?.label} (Low)</span>
+            <span className="text-rose-400">{grade.stops[grade.stops.length - 1]?.label} (High)</span>
+          </div>
         </div>
       )}
     </div>
